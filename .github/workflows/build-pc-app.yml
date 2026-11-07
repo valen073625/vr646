@@ -1,0 +1,43 @@
+name: Build PC App (.exe)
+
+# Builds pc-app/ into a single portable .exe on GitHub's own Windows
+# runners, using electron-builder — no need to install Node.js or anything
+# else on your own PC. Download the result from the finished run's
+# "Artifacts" section.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'pc-app/**'
+      - 'mobile-client/**'
+      - '.github/workflows/build-pc-app.yml'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: pc-app
+        run: npm install
+
+      - name: Build portable .exe
+        working-directory: pc-app
+        run: npm run dist:portable
+
+      - name: Upload .exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: diy-vr-link-portable-exe
+          path: pc-app/dist/DIY-VR-Link-Portable.exe
+          if-no-files-found: error

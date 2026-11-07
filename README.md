@@ -79,6 +79,18 @@ you should see the status pill in the PC window turn green.
 
 ## 2. Packaging the PC app into a standalone, zero-install .exe
 
+### Option A: build it in the cloud (no install on your machine)
+
+This repo's **Actions** tab has a **Build PC App (.exe)** workflow
+(`.github/workflows/build-pc-app.yml`) that builds it on a GitHub-hosted
+Windows runner:
+
+1. GitHub → **Actions** → **Build PC App (.exe)** → **Run workflow**.
+2. Wait a couple of minutes, open the finished run, download the
+   `diy-vr-link-portable-exe` artifact (a zip containing the `.exe`).
+
+### Option B: build it yourself locally
+
 ```bash
 cd pc-app
 npm install
