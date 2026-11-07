@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<title>DIY VR Headset</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Pre-permission landing screen: iOS/Android both require a user gesture
+       (tap) before DeviceOrientation/camera permissions can be requested. -->
+  <div id="gate">
+    <h1>DIY VR Headset</h1>
+    <p>Put your phone in a cardboard/VR holder after tapping start.</p>
+    <label class="row"><input type="checkbox" id="gestureToggle" checked /> Enable hand-gesture walking (camera)</label>
+    <button id="startBtn">Start</button>
+    <p class="small" id="errorMsg"></p>
+  </div>
+
+  <div id="vrRoot" class="hidden">
+    <canvas id="glcanvas"></canvas>
+    <video id="camFeed" playsinline muted></video>
+    <canvas id="gestureOverlay"></canvas>
+
+    <div id="hud">
+      <div id="connDot" class="dot off"></div>
+      <button id="recenterBtn">⟲ Recenter</button>
+      <button id="autowalkBtn">Auto-walk: OFF</button>
+    </div>
+  </div>
+
+  <!-- Three.js for the stereo scene + distortion/vignette post-processing -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js" crossorigin="anonymous"></script>
+
+  <!-- MediaPipe Hands (CDN, cached by the browser/service worker after first load) -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+  <script src="orientation.js"></script>
+  <script src="stereo.js"></script>
+  <script src="gesture.js"></script>
+  <script src="net.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

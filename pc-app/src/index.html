@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>DIY VR Link</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>DIY VR Link</h1>
+    <div id="statusPill" class="pill disconnected">Waiting for phone…</div>
+  </header>
+
+  <main>
+    <section class="card" id="pairCard">
+      <h2>1. Connect your phone</h2>
+      <p>Open this address in your phone's browser, on the <b>same Wi-Fi network</b>:</p>
+      <div class="connect-row">
+        <code id="httpAddress">http://…</code>
+        <img id="qr" width="160" height="160" alt="QR code" />
+      </div>
+      <p class="hint">This loads the mobile headset/controller page directly from this PC — no app
+      store install needed. Data socket: <code id="wsAddress">ws://…</code></p>
+    </section>
+
+    <section class="card">
+      <h2>2. Head tracking</h2>
+      <div class="field">
+        <label>Sensitivity <span id="sensitivityVal"></span></label>
+        <input type="range" id="sensitivity" min="0.2" max="3" step="0.05" />
+      </div>
+      <div class="field">
+        <label>Smoothing <span id="smoothingVal"></span></label>
+        <input type="range" id="smoothing" min="0" max="0.95" step="0.01" />
+      </div>
+      <div class="field">
+        <label>Deadzone (degrees) <span id="deadzoneVal"></span></label>
+        <input type="range" id="deadzone" min="0" max="2" step="0.05" />
+      </div>
+      <div class="field">
+        <label>IPD (mm) <span id="ipdVal"></span></label>
+        <input type="range" id="ipd" min="50" max="75" step="0.5" />
+      </div>
+      <div class="field checkbox">
+        <input type="checkbox" id="invertPitch" />
+        <label for="invertPitch">Invert pitch</label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>3. Movement</h2>
+      <div class="field">
+        <label>Input method</label>
+        <select id="movementMode">
+          <option value="keyboard">Simulated W key (desktop/flat games)</option>
+          <option value="driverAxis">Virtual controller axis (SteamVR games)</option>
+        </select>
+      </div>
+      <div class="field checkbox">
+        <input type="checkbox" id="gazeSteering" />
+        <label for="gazeSteering">Gaze-based steering (walk where you look)</label>
+      </div>
+      <div class="field">
+        <label>Max speed <span id="maxSpeedVal"></span></label>
+        <input type="range" id="maxSpeed" min="0.2" max="2" step="0.05" />
+      </div>
+      <div class="field walk-indicator">
+        <span>Walking:</span>
+        <div id="walkDot" class="dot off"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Live telemetry</h2>
+      <pre id="telemetry">—</pre>
+    </section>
+  </main>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+{
+  "name": "diy-vr-pc-app",
+  "productName": "DIY VR Link",
+  "version": "1.0.0",
+  "description": "PC companion app: receives phone head-tracking + gesture data over Wi-Fi and feeds it to SteamVR / the active game.",
+  "main": "main.js",
+  "author": "you",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "dist:portable": "electron-builder --win portable"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "@nut-tree-fork/nut-js": "^4.2.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.diyvr.link",
+    "productName": "DIY VR Link",
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      { "from": "../mobile-client", "to": "mobile-client" }
+    ],
+    "win": {
+      "target": [
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "src/icon.ico"
+    },
+    "portable": {
+      "artifactName": "DIY-VR-Link-Portable.exe"
+    },
+    "asar": true
+  }
+}

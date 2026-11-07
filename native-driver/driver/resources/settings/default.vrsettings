@@ -1,0 +1,6 @@
+{
+  "driver_diyvr": {
+    "enable": true,
+    "loglevel": 1
+  }
+}

@@ -1,0 +1,41 @@
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+  background: #000; color: #fff; font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+  overscroll-behavior: none;
+}
+.hidden { display: none !important; }
+
+#gate {
+  height: 100%; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 16px; text-align: center; padding: 24px;
+}
+#gate h1 { margin: 0; }
+#gate .row { display: flex; align-items: center; gap: 8px; }
+#gate button {
+  font-size: 20px; padding: 14px 36px; border-radius: 999px; border: none;
+  background: #4f8cff; color: #fff; font-weight: 700;
+}
+.small { color: #999; font-size: 12px; max-width: 320px; }
+
+#vrRoot { position: relative; width: 100%; height: 100%; }
+#glcanvas { width: 100%; height: 100%; display: block; }
+
+/* The camera feed is only used as MediaPipe's input source; it is hidden
+   from view but must remain in the DOM and "playing" for processing. */
+#camFeed { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+#gestureOverlay { position: absolute; top: 0; left: 0; pointer-events: none; opacity: 0; }
+
+#hud {
+  position: absolute; bottom: 10px; left: 0; right: 0;
+  display: flex; justify-content: center; gap: 12px; z-index: 5;
+}
+#hud button {
+  background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 999px; padding: 10px 16px; font-size: 13px;
+}
+#connDot {
+  position: absolute; top: 10px; left: 10px; width: 10px; height: 10px; border-radius: 50%;
+}
+#connDot.on { background: #5fd97a; }
+#connDot.off { background: #ff5f5f; }
