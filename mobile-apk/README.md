@@ -18,7 +18,27 @@ changes between networks, so baking a fixed address into the app would break
 it elsewhere, and bundling the web files inside the `.apk` would make
 `location.hostname` resolve to nothing useful for the WebSocket connection.
 
-## One-time build setup
+## Option A: build it in the cloud, no install on your machine (easiest)
+
+This repo includes `.github/workflows/build-apk.yml`, which builds the
+`.apk` on GitHub's own servers:
+
+1. On GitHub, open this repo → **Actions** tab.
+2. Click **Build Android APK** in the left list → **Run workflow** →
+   **Run workflow** (green button).
+3. Wait ~3–5 minutes for it to finish (green checkmark).
+4. Open that finished run, scroll to **Artifacts**, and download
+   `diy-vr-debug-apk` — it's a zip containing `app-debug.apk`.
+5. Copy that `.apk` to your phone and tap it to install (allow "unknown
+   sources" when prompted).
+
+This produces a **debug** build (unsigned, fine for your own phone). If you
+want a signed release build instead, the workflow file has a commented-out
+section with the exact steps/secrets needed — ask and it can be wired up.
+
+## Option B: build it yourself locally
+
+### One-time build setup
 
 1. Install **Android Studio** (free) — it bundles the Android SDK and a JDK.
 2. Install **Node.js** only on your *dev* machine (needed for the Capacitor
