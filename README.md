@@ -31,6 +31,12 @@ vr-diy-system/
 │   ├── src/*.cpp/.h         native-driver/README.md for why and how).
 │   └── driver/              Build once yourself; ship the compiled .dll to
 │                            your users, who never touch a compiler.
+│
+├── mobile-apk/              Optional: wraps mobile-client/ as a real
+│   ├── capacitor.config.json installable Android .apk instead of a browser
+│   ├── www/index.html        tab (one-time build with Android Studio — see
+│   └── README.md             mobile-apk/README.md).
+│
 └── README.md                 (this file)
 ```
 

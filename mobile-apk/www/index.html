@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<title>DIY VR</title>
+<style>
+  html, body { margin:0; height:100%; background:#0f1117; color:#e6e8ee;
+    font-family:-apple-system,Segoe UI,Roboto,sans-serif; }
+  .wrap { height:100%; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:16px; padding:24px; text-align:center; }
+  h1 { margin:0; font-size:22px; }
+  p { color:#9aa3b5; font-size:13px; max-width:300px; margin:0; }
+  input { width:240px; padding:14px; font-size:18px; text-align:center;
+    border-radius:10px; border:1px solid #262b38; background:#161922; color:#fff; }
+  button { padding:14px 32px; font-size:17px; font-weight:700; border:none;
+    border-radius:999px; background:#4f8cff; color:#fff; }
+  .hint { font-size:11px; color:#5c6378; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>DIY VR Headset</h1>
+    <p>Enter the IP address shown in the DIY VR Link app on your PC
+       (e.g. <code>192.168.1.42</code>).</p>
+    <input id="ip" type="text" inputmode="decimal" placeholder="192.168.1.42" />
+    <button id="go">Connect</button>
+    <p class="hint">Same Wi-Fi network as the PC. The port (8080) is added automatically.</p>
+  </div>
+
+  <script>
+    const ipInput = document.getElementById('ip');
+    const saved = localStorage.getItem('diyvr_pc_ip');
+    if (saved) ipInput.value = saved;
+
+    document.getElementById('go').addEventListener('click', () => {
+      const ip = ipInput.value.trim();
+      if (!ip) return;
+      localStorage.setItem('diyvr_pc_ip', ip);
+      // Full navigation (not an iframe) so location.hostname inside
+      // mobile-client/net.js correctly resolves to the PC's address.
+      window.location.href = `http://${ip}:8080/`;
+    });
+
+    // If we were redirected back here (e.g. the PC app was closed mid-session
+    // and the page errored out), auto-fill but don't auto-connect — let the
+    // person confirm the IP hasn't changed.
+  </script>
+</body>
+</html>

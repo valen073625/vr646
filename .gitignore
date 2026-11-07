@@ -4,3 +4,5 @@ build/
 *.log
 .DS_Store
 native-driver/third_party/
+mobile-apk/android/
+mobile-apk/ios/
