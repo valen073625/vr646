@@ -1,12 +1,5 @@
 {
-  "appId": "com.diyvr.headset",
-  "appName": "DIY VR Headset",
-  "webDir": "www",
-  "server": {
-    "cleartext": true,
-    "androidScheme": "http"
-  },
-  "android": {
-    "allowMixedContent": true
-  }
+  "appId": "com.diyvr.arena",
+  "appName": "VR Arena",
+  "webDir": "www"
 }
