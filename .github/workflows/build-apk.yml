@@ -1,20 +1,15 @@
 name: Build Android APK
 
-# Builds mobile-apk/ (the Capacitor wrapper around mobile-client/) into a
-# debug .apk entirely on GitHub's servers — no Android Studio needed on your
-# own machine. Download the result from the workflow run's "Artifacts"
-# section once it finishes.
-#
-# This produces a DEBUG apk (unsigned, installable via "unknown sources",
-# fine for personal use). A release/signed build needs a keystore, which
-# shouldn't live in the repo — see the commented-out section at the bottom
-# for how to add that with GitHub Secrets if you want a signed release build.
+# Packages game/ (standalone VR Arena) into a debug APK via Capacitor.
+# Download app-debug.apk from the run's Artifacts when it finishes.
+# Unsigned debug build: install it with "unknown sources".
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
+      - 'game/**'
       - 'mobile-apk/**'
       - '.github/workflows/build-apk.yml'
 
@@ -41,16 +36,45 @@ jobs:
         working-directory: mobile-apk
         run: npm install
 
+      - name: Bundle the VR game into the web dir
+        working-directory: mobile-apk
+        run: node prepare-web.js
+
       - name: Generate the native Android project
         working-directory: mobile-apk
         run: npx cap add android
 
-      - name: Add camera + network permissions to the manifest
+      - name: Camera permission and landscape
         working-directory: mobile-apk
         run: |
-          MANIFEST=android/app/src/main/AndroidManifest.xml
-          sed -i 's#<uses-permission android:name="android.permission.INTERNET" />#<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />#' "$MANIFEST"
-          grep -A2 'permission.INTERNET' "$MANIFEST"
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          text = p.read_text()
+          perms = [
+              "android.permission.INTERNET",
+              "android.permission.CAMERA",
+              "android.permission.ACCESS_NETWORK_STATE",
+              "android.permission.MODIFY_AUDIO_SETTINGS",
+          ]
+          for perm in perms:
+              if perm not in text:
+                  tag = f'<uses-permission android:name="{perm}" />'
+                  text = text.replace("<application", tag + "\n    <application", 1)
+          if "android.hardware.camera" not in text:
+              feat = (
+                  '<uses-feature android:name="android.hardware.camera" android:required="false" />\n'
+                  '    <uses-feature android:name="android.hardware.camera.front" android:required="false" />\n'
+                  "    <application"
+              )
+              text = text.replace("<application", feat, 1)
+          old = 'android:launchMode="singleTask"'
+          new = 'android:launchMode="singleTask" android:screenOrientation="sensorLandscape"'
+          if old in text and "screenOrientation" not in text:
+              text = text.replace(old, new, 1)
+          p.write_text(text)
+          print(text)
+          PY
 
       - name: Sync Capacitor
         working-directory: mobile-apk
@@ -66,39 +90,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: diy-vr-debug-apk
+          name: vr-arena-debug-apk
           path: mobile-apk/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-
-# ---------------------------------------------------------------------------
-# Optional: signed RELEASE build instead of debug.
-# 1. Locally: keytool -genkey -v -keystore release.keystore -alias diyvr \
-#      -keyalg RSA -keysize 2048 -validity 10000
-# 2. In the repo's Settings -> Secrets and variables -> Actions, add:
-#      ANDROID_KEYSTORE_BASE64  (base64 of release.keystore)
-#      ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
-# 3. Replace the two steps above ("Build debug APK" / "Upload APK") with:
-#
-#      - name: Decode keystore
-#        working-directory: mobile-apk/android
-#        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > release.keystore
-#
-#      - name: Build signed release APK
-#        working-directory: mobile-apk/android
-#        env:
-#          ORG_GRADLE_PROJECT_storeFile: release.keystore
-#          ORG_GRADLE_PROJECT_storePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-#          ORG_GRADLE_PROJECT_keyAlias: ${{ secrets.ANDROID_KEY_ALIAS }}
-#          ORG_GRADLE_PROJECT_keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
-#        run: ./gradlew assembleRelease --no-daemon
-#
-#      - name: Upload APK
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: diy-vr-release-apk
-#          path: mobile-apk/android/app/build/outputs/apk/release/app-release.apk
-#
-#    (This also needs a `signingConfigs` block added to
-#    mobile-apk/android/app/build.gradle referencing those same
-#    ORG_GRADLE_PROJECT_* properties — ask and I'll add it if you want the
-#    signed variant.)
