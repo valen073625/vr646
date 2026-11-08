@@ -1,8 +1,6 @@
 name: Build Android APK
 
-# Packages game/ (standalone VR Arena) into a debug APK via Capacitor.
-# Download app-debug.apk from the run's Artifacts when it finishes.
-# Unsigned debug build: install it with "unknown sources".
+# Packages game/ into a debug APK and publishes VR-Arena.apk on GitHub Releases.
 
 on:
   workflow_dispatch:
@@ -12,6 +10,9 @@ on:
       - 'game/**'
       - 'mobile-apk/**'
       - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -113,9 +114,14 @@ jobs:
         working-directory: mobile-apk/android
         run: ./gradlew assembleDebug --no-daemon
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Rename APK
+        run: cp mobile-apk/android/app/build/outputs/apk/debug/app-debug.apk VR-Arena.apk
+
+      - name: Publish APK on GitHub Releases
+        uses: softprops/action-gh-release@v2
         with:
-          name: vr-arena-debug-apk
-          path: mobile-apk/android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          tag_name: v0.1.0
+          name: VR Arena v0.1.0
+          body: APK de depuración. Instalar permitiendo orígenes desconocidos. Aceptar la cámara al abrir.
+          files: VR-Arena.apk
+          fail_on_unmatched_files: true
