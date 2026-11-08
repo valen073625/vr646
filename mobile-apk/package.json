@@ -2,10 +2,11 @@
   "name": "diy-vr-android-app",
   "version": "1.0.0",
   "private": true,
-  "description": "Thin native Android wrapper (Capacitor) around mobile-client/, so you get a real installable .apk instead of only a browser tab.",
+  "description": "Capacitor wrapper that installs the VR Arena hand-tracking game as an Android APK.",
   "scripts": {
-    "add:android": "npx cap add android",
-    "sync": "npx cap sync android",
+    "prepare:web": "node prepare-web.js",
+    "add:android": "npm run prepare:web && npx cap add android",
+    "sync": "npm run prepare:web && npx cap sync android",
     "open:android": "npx cap open android"
   },
   "dependencies": {
