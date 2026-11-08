@@ -1,6 +1,5 @@
 /**
  * main.js — Game entry point
- * Ties together: Three.js scene, physics, hand tracking, player, enemies, stereo renderer.
  */
 import * as THREE from 'three';
 import { PhysicsWorld }    from './physics.js';
@@ -116,7 +115,6 @@ btnGrant.addEventListener('click', async () => {
     if (cameraOk) startHandTracking();
   } catch (e) {
     console.warn('Camera denied:', e);
-    permMsg.style.display = 'flex';
   }
 });
 
@@ -124,7 +122,6 @@ async function startHandTracking() {
   if (!cameraOk || !videoEl.srcObject) return;
   handTracker = new HandTracker();
   await handTracker.init(videoEl);
-
   handTracker.addEventListener('frame', (e) => {
     if (!gameRunning || !player) return;
     const { left, right } = e.detail;
@@ -139,7 +136,6 @@ function buildWorld() {
   scene   = new THREE.Scene();
   physics = new PhysicsWorld();
   physics.addFloor(0);
-
   levelObjects = buildLevel(scene, physics);
   player = new Player(scene, physics);
 
@@ -170,7 +166,6 @@ function buildWorld() {
 
   enemies = new EnemyManager(scene, physics);
   enemies.spawnWave(4);
-
   stereo = new StereoRenderer(renderer, 0.064);
   stereo.setSize(window.innerWidth, window.innerHeight);
 }
@@ -203,33 +198,24 @@ function showGameOver() {
 function gameLoop(ts) {
   if (!gameRunning) return;
   requestAnimationFrame(gameLoop);
-
   const dt = Math.min((ts - lastTime) / 1000, 0.05);
   lastTime = ts;
-
   physics.step(dt);
   player.update(dt);
-
   const dmgThisFrame = enemies.update(dt, player.position, player.camera.position);
-  if (dmgThisFrame > 0) {
-    player.takeDamage(dmgThisFrame);
-  }
-
+  if (dmgThisFrame > 0) player.takeDamage(dmgThisFrame);
   if (enemies.aliveCount === 0) {
     enemies.nextWave();
     hudWave.textContent = `WAVE ${enemies.wave}`;
     score += 500;
     hudScore.textContent = `🏆 ${score}`;
   }
-
   if (!handTracker) {
     gestureLeft.textContent  = '📱 gyro only';
     gestureRight.textContent = '🚶 VC = walk';
   }
-
-  if (stereoMode) {
-    stereo.render(scene, player.camera);
-  } else {
+  if (stereoMode) stereo.render(scene, player.camera);
+  else {
     renderer.setRenderTarget(null);
     renderer.render(scene, player.camera);
   }
@@ -242,7 +228,7 @@ function beginLoop() {
   window.addEventListener('resize', checkOrientation);
   checkOrientation();
   gameRunning = true;
-  lastTime    = performance.now();
+  lastTime = performance.now();
   requestAnimationFrame(gameLoop);
 }
 
@@ -265,7 +251,15 @@ async function bootstrap() {
       cameraOk = false;
     }
 
-    buildWorld();
+    try {
+      setLoading('Armando arena…');
+      buildWorld();
+    } catch (e) {
+      console.error(e);
+      setLoading('Error al armar el nivel: ' + (e && e.message ? e.message : e));
+      return;
+    }
+
     hideLoading();
     beginLoop();
 
@@ -273,22 +267,21 @@ async function bootstrap() {
       startHandTracking().catch((err) => {
         console.warn('Hand tracking failed:', err);
         handTracker = null;
-        gestureLeft.textContent  = '👈 gyro only';
+        gestureLeft.textContent = '👈 gyro only';
         gestureRight.textContent = '👉 no hands';
       });
     } else {
-      permMsg.style.display = 'flex';
+      gestureLeft.textContent = '👈 sin cámara';
+      gestureRight.textContent = '👉 gyro only';
     }
   });
 
   const keys = new Set();
   window.addEventListener('keydown', (e) => keys.add(e.code));
-  window.addEventListener('keyup',   (e) => keys.delete(e.code));
-
+  window.addEventListener('keyup', (e) => keys.delete(e.code));
   setInterval(() => {
     if (!player || !gameRunning) return;
-    if (keys.has('KeyW') || keys.has('ArrowUp')) player._walkLeft = true;
-    else player._walkLeft = false;
+    player._walkLeft = keys.has('KeyW') || keys.has('ArrowUp');
     if (keys.has('Space')) player.recenter();
   }, 16);
 }
