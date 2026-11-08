@@ -11,9 +11,9 @@ export class HandTracker extends EventTarget {
     this.left  = new GestureTracker('Left');
     this.right = new GestureTracker('Right');
     this._hands = null;
-    this._camera = null;
     this._active = false;
     this._lastResults = null;
+    this._timer = 0;
   }
 
   async init(videoEl) {
@@ -27,43 +27,44 @@ export class HandTracker extends EventTarget {
 
     this._hands.setOptions({
       maxNumHands: 2,
-      modelComplexity: 1,          // 0=lite 1=full — use 1 for accurate gestures
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.6,
+      modelComplexity: 0,
+      minDetectionConfidence: 0.6,
+      minTrackingConfidence: 0.5,
     });
 
     this._hands.onResults((results) => this._onResults(results));
 
-    // Use MediaPipe Camera utils for the render loop
-    this._camera = new Camera(videoEl, {
-      onFrame: async () => {
-        if (this._active) await this._hands.send({ image: videoEl });
-      },
-      width: 320,
-      height: 240,
-      facingMode: 'user',
-    });
-
     this._active = true;
-    await this._camera.start();
+    await this._hands.send({ image: videoEl });
+    this._loop(videoEl);
     this.dispatchEvent(new Event('ready'));
+  }
+
+  _loop(videoEl) {
+    if (!this._active) return;
+    this._timer = requestAnimationFrame(async () => {
+      if (!this._active) return;
+      try {
+        if (videoEl.readyState >= 2) await this._hands.send({ image: videoEl });
+      } catch (err) {
+        console.warn('Hand frame failed:', err);
+      }
+      this._loop(videoEl);
+    });
   }
 
   _onResults(results) {
     this._lastResults = results;
 
-    // Reset both trackers — will be populated by what MP returns
     let leftLm  = null;
     let rightLm = null;
 
     if (results.multiHandLandmarks) {
       for (let i = 0; i < results.multiHandLandmarks.length; i++) {
         const lm = results.multiHandLandmarks[i];
-        const handedness = results.multiHandedness?.[i]?.label; // 'Left'|'Right' (MP mirrors for selfie)
-        // MediaPipe returns mirrored labels for user-facing camera
-        // 'Right' in MP = user's LEFT hand and vice versa; we correct this:
+        const handedness = results.multiHandedness?.[i]?.label;
         if (handedness === 'Right') {
-          leftLm = lm;  // MP Right = your left in front-cam mirror
+          leftLm = lm;
         } else if (handedness === 'Left') {
           rightLm = lm;
         }
@@ -83,6 +84,6 @@ export class HandTracker extends EventTarget {
 
   stop() {
     this._active = false;
-    this._camera?.stop();
+    if (this._timer) cancelAnimationFrame(this._timer);
   }
 }
