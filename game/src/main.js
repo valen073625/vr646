@@ -11,7 +11,6 @@ import { EnemyManager }    from './enemy.js';
 import { StereoRenderer }  from './stereoRenderer.js';
 import { GESTURE }         from './handGestures.js';
 
-// ─── Global state ───────────────────────────────────────────────────────────
 let renderer, scene, physics, player, enemies, stereo, handTracker;
 let levelObjects = [];
 let gameRunning  = false;
@@ -21,9 +20,9 @@ let score        = 0;
 let motionOk     = false;
 let cameraOk     = false;
 
-// ─── DOM refs ───────────────────────────────────────────────────────────────
 const canvas        = document.getElementById('canvas');
 const loadingEl     = document.getElementById('loading');
+const loadingLabel  = document.getElementById('loading-label');
 const startScreen   = document.getElementById('start-screen');
 const permMsg       = document.getElementById('permission-msg');
 const btnStart      = document.getElementById('btn-start');
@@ -37,10 +36,28 @@ const gestureRight  = document.getElementById('gesture-right');
 const damageFlash   = document.getElementById('damage-flash');
 const videoEl       = document.getElementById('cam-feed');
 
-// ─── Init Three.js renderer ─────────────────────────────────────────────────
+function setLoading(text) {
+  if (loadingLabel) loadingLabel.textContent = text;
+  loadingEl.style.display = 'flex';
+}
+
+function hideLoading() {
+  loadingEl.style.display = 'none';
+}
+
+function withTimeout(promise, ms, label) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(label + ' timeout')), ms);
+    Promise.resolve(promise).then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); },
+    );
+  });
+}
+
 function initRenderer() {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
   renderer.toneMapping       = THREE.ACESFilmicToneMapping;
@@ -59,11 +76,9 @@ function onResize() {
   }
 }
 
-// ─── Gyroscope ──────────────────────────────────────────────────────────────
 function initGyro() {
   if (typeof DeviceOrientationEvent !== 'undefined' &&
       typeof DeviceOrientationEvent.requestPermission === 'function') {
-    // iOS 13+: permission needed
     DeviceOrientationEvent.requestPermission()
       .then(state => { if (state === 'granted') listenGyro(); })
       .catch(() => {});
@@ -81,64 +96,53 @@ function listenGyro() {
   }, true);
 }
 
-// ─── Camera / Hand tracking ──────────────────────────────────────────────────
 async function initCamera() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: 320, height: 240 },
-      audio: false,
-    });
-    videoEl.srcObject = stream;
-    await videoEl.play();
-    cameraOk = true;
-  } catch(e) {
-    console.warn('Camera denied:', e);
-    permMsg.style.display = 'flex';
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    throw new Error('getUserMedia missing');
   }
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } },
+    audio: false,
+  });
+  videoEl.srcObject = stream;
+  await videoEl.play();
+  cameraOk = true;
 }
 
 btnGrant.addEventListener('click', async () => {
   permMsg.style.display = 'none';
-  await initCamera();
-  if (cameraOk) await startHandTracking();
+  try {
+    await withTimeout(initCamera(), 8000, 'camera');
+    if (cameraOk) startHandTracking();
+  } catch (e) {
+    console.warn('Camera denied:', e);
+    permMsg.style.display = 'flex';
+  }
 });
 
 async function startHandTracking() {
   if (!cameraOk || !videoEl.srcObject) return;
-  try {
-    handTracker = new HandTracker();
-    await handTracker.init(videoEl);
+  handTracker = new HandTracker();
+  await handTracker.init(videoEl);
 
-    handTracker.addEventListener('frame', (e) => {
-      if (!gameRunning || !player) return;
-      const { left, right } = e.detail;
-
-      // Apply to player
-      player.applyGestures(left.tracker, right.tracker, 1/60);
-      player.updateHandMeshes(left.tracker, right.tracker);
-
-      // Update HUD gesture labels
-      gestureLeft.textContent  = `👈 ${left.gesture}`;
-      gestureRight.textContent = `👉 ${right.gesture}`;
-    });
-  } catch(err) {
-    console.warn('Hand tracking failed:', err);
-    gestureLeft.textContent  = '👈 gyro only';
-    gestureRight.textContent = '👉 no hands';
-  }
+  handTracker.addEventListener('frame', (e) => {
+    if (!gameRunning || !player) return;
+    const { left, right } = e.detail;
+    player.applyGestures(left.tracker, right.tracker, 1/60);
+    player.updateHandMeshes(left.tracker, right.tracker);
+    gestureLeft.textContent  = `👈 ${left.gesture}`;
+    gestureRight.textContent = `👉 ${right.gesture}`;
+  });
 }
 
-// ─── Build world ─────────────────────────────────────────────────────────────
 function buildWorld() {
   scene   = new THREE.Scene();
   physics = new PhysicsWorld();
   physics.addFloor(0);
 
   levelObjects = buildLevel(scene, physics);
-
   player = new Player(scene, physics);
 
-  // Player event handlers
   player.addEventListener('punch', (e) => {
     const { pos, dir } = e.detail;
     enemies.enemies.forEach(enemy => {
@@ -153,7 +157,6 @@ function buildWorld() {
         }
       }
     });
-    // Also throw grabbed objects with punch force
   });
 
   player.addEventListener('damaged', (e) => {
@@ -174,7 +177,7 @@ function buildWorld() {
 
 function triggerDamageFlash() {
   damageFlash.style.animation = 'none';
-  damageFlash.offsetHeight; // reflow
+  damageFlash.offsetHeight;
   damageFlash.style.animation = 'flash 0.5s ease-out forwards';
 }
 
@@ -197,7 +200,6 @@ function showGameOver() {
   document.body.appendChild(overlay);
 }
 
-// ─── Main loop ───────────────────────────────────────────────────────────────
 function gameLoop(ts) {
   if (!gameRunning) return;
   requestAnimationFrame(gameLoop);
@@ -205,19 +207,14 @@ function gameLoop(ts) {
   const dt = Math.min((ts - lastTime) / 1000, 0.05);
   lastTime = ts;
 
-  // Physics step
   physics.step(dt);
-
-  // Player update
   player.update(dt);
 
-  // Enemy update
   const dmgThisFrame = enemies.update(dt, player.position, player.camera.position);
   if (dmgThisFrame > 0) {
     player.takeDamage(dmgThisFrame);
   }
 
-  // Check wave cleared
   if (enemies.aliveCount === 0) {
     enemies.nextWave();
     hudWave.textContent = `WAVE ${enemies.wave}`;
@@ -225,13 +222,11 @@ function gameLoop(ts) {
     hudScore.textContent = `🏆 ${score}`;
   }
 
-  // Hand label updates (if no hand tracking, show gyro-only)
   if (!handTracker) {
     gestureLeft.textContent  = '📱 gyro only';
     gestureRight.textContent = '🚶 VC = walk';
   }
 
-  // Render
   if (stereoMode) {
     stereo.render(scene, player.camera);
   } else {
@@ -240,57 +235,65 @@ function gameLoop(ts) {
   }
 }
 
-// ─── Startup ─────────────────────────────────────────────────────────────────
+function beginLoop() {
+  const checkOrientation = () => {
+    stereoMode = window.innerWidth > window.innerHeight;
+  };
+  window.addEventListener('resize', checkOrientation);
+  checkOrientation();
+  gameRunning = true;
+  lastTime    = performance.now();
+  requestAnimationFrame(gameLoop);
+}
+
 async function bootstrap() {
   initRenderer();
-
-  // Preload MediaPipe / Three
-  await new Promise(r => setTimeout(r, 300));
-
-  loadingEl.style.display = 'none';
+  hideLoading();
   startScreen.style.display = 'flex';
 
   btnStart.addEventListener('click', async () => {
+    if (gameRunning) return;
     startScreen.style.display = 'none';
-    document.getElementById('loading').style.display = 'flex';
-    document.getElementById('loading').querySelector('div').nextSibling.textContent = 'Iniciando…';
-
-    // Request gyro (iOS)
+    setLoading('Iniciando…');
     initGyro();
 
-    // Request camera
-    await initCamera();
-    if (cameraOk) await startHandTracking();
+    try {
+      setLoading('Cámara…');
+      await withTimeout(initCamera(), 8000, 'camera');
+    } catch (e) {
+      console.warn('Camera denied:', e);
+      cameraOk = false;
+    }
 
-    // Build world
     buildWorld();
+    hideLoading();
+    beginLoop();
 
-    document.getElementById('loading').style.display = 'none';
-
-    // Stereo mode toggle: landscape = stereo, portrait = mono
-    const checkOrientation = () => {
-      stereoMode = window.innerWidth > window.innerHeight;
-    };
-    window.addEventListener('resize', checkOrientation);
-    checkOrientation();
-
-    gameRunning = true;
-    lastTime    = performance.now();
-    requestAnimationFrame(gameLoop);
+    if (cameraOk) {
+      startHandTracking().catch((err) => {
+        console.warn('Hand tracking failed:', err);
+        handTracker = null;
+        gestureLeft.textContent  = '👈 gyro only';
+        gestureRight.textContent = '👉 no hands';
+      });
+    } else {
+      permMsg.style.display = 'flex';
+    }
   });
 
-  // Keyboard fallback for desktop testing
   const keys = new Set();
   window.addEventListener('keydown', (e) => keys.add(e.code));
   window.addEventListener('keyup',   (e) => keys.delete(e.code));
 
-  // Simple keyboard walk for desktop testing (wasd)
   setInterval(() => {
     if (!player || !gameRunning) return;
-    if (keys.has('KeyW') || keys.has('ArrowUp'))    player._walkLeft  = true;
+    if (keys.has('KeyW') || keys.has('ArrowUp')) player._walkLeft = true;
     else player._walkLeft = false;
     if (keys.has('Space')) player.recenter();
   }, 16);
 }
 
-bootstrap().catch(console.error);
+bootstrap().catch((err) => {
+  console.error(err);
+  setLoading('Error al iniciar: ' + (err && err.message ? err.message : err));
+});
