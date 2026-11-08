@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>VR BONELAB-Style · Hand Tracking</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+    #canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+
+    #ui-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 10;
+    }
+
+    #hud {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      color: #0ff; font-family: monospace; font-size: 13px;
+      text-shadow: 0 0 8px #0ff; letter-spacing: 1px;
+      display: flex; gap: 20px; align-items: center;
+    }
+    .hud-item { background: rgba(0,20,40,0.7); padding: 4px 10px; border: 1px solid #0ff3; border-radius: 4px; }
+
+    #gesture-left, #gesture-right {
+      position: fixed; bottom: 24px; font-family: monospace; font-size: 12px;
+      color: #0f8; text-shadow: 0 0 6px #0f8; background: rgba(0,30,20,0.7);
+      padding: 6px 12px; border: 1px solid #0f83; border-radius: 6px;
+    }
+    #gesture-left  { left: 16px; }
+    #gesture-right { right: 16px; }
+
+    #health-bar {
+      position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
+      width: 160px; height: 10px; background: #200; border: 1px solid #f00;
+      border-radius: 5px; overflow: hidden;
+    }
+    #health-fill { height: 100%; background: linear-gradient(90deg,#f00,#f80); width: 100%; transition: width .2s; }
+
+    #start-screen {
+      position: fixed; inset: 0; background: rgba(0,0,10,0.95);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 100; color: #fff; font-family: monospace; text-align: center; padding: 20px;
+      pointer-events: all;
+    }
+    #start-screen h1 { font-size: 2em; color: #0ff; text-shadow: 0 0 20px #0ff; margin-bottom: 10px; }
+    #start-screen p  { color: #aaa; margin-bottom: 8px; font-size: 0.9em; max-width: 320px; }
+    .gesture-guide {
+      display: grid; grid-template-columns: auto auto; gap: 8px 16px;
+      margin: 16px 0; text-align: left; font-size: 0.85em;
+    }
+    .gesture-guide .icon { font-size: 1.4em; }
+    .gesture-guide .desc { color: #8ff; align-self: center; }
+    #btn-start {
+      margin-top: 16px; padding: 14px 40px; font-size: 1.1em; font-family: monospace;
+      background: #0ff2; border: 2px solid #0ff; color: #0ff; cursor: pointer;
+      border-radius: 8px; pointer-events: all;
+    }
+    #btn-start:active { background: #0ff4; }
+
+    #permission-msg {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 200;
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      color: #fff; font-family: monospace; gap: 16px; text-align: center; padding: 20px;
+      pointer-events: all;
+    }
+    #permission-msg button {
+      padding: 12px 32px; background: #0a0; border: 2px solid #0f0; color: #0f0;
+      font-family: monospace; font-size: 1em; cursor: pointer; border-radius: 6px;
+      pointer-events: all;
+    }
+
+    #loading {
+      position: fixed; inset: 0; background: #000; z-index: 300;
+      display: flex; align-items: center; justify-content: center;
+      color: #0ff; font-family: monospace; font-size: 1.2em;
+    }
+    .spinner { border: 3px solid #0ff3; border-top-color: #0ff; border-radius: 50%;
+      width: 36px; height: 36px; animation: spin .8s linear infinite; margin-right: 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #crosshair {
+      position: fixed; top: 50%; left: 25%; transform: translate(-50%,-50%);
+      width: 16px; height: 16px; pointer-events: none;
+    }
+    #crosshair::before, #crosshair::after {
+      content: ''; position: absolute; background: rgba(255,255,255,0.6);
+    }
+    #crosshair::before { width: 2px; height: 100%; left: 50%; transform: translateX(-50%); }
+    #crosshair::after  { width: 100%; height: 2px; top: 50%; transform: translateY(-50%); }
+
+    .damage-flash {
+      position: fixed; inset: 0; background: rgba(255,0,0,0.3);
+      pointer-events: none; opacity: 0; z-index: 50;
+      animation: none;
+    }
+    @keyframes flash { 0%{opacity:1} 100%{opacity:0} }
+  </style>
+</head>
+<body>
+
+<div id="loading"><div class="spinner"></div>Cargando…</div>
+
+<div id="start-screen" style="display:none">
+  <h1>⚡ VR ARENA</h1>
+  <p>Juego VR estilo BONELAB con hand tracking. Movete con señas, agarrá objetos, golpeá enemigos.</p>
+  <div class="gesture-guide">
+    <span class="icon">✌️</span><span class="desc">Índice+Medio extendidos = <strong>Caminar</strong></span>
+    <span class="icon">👊</span><span class="desc">Puño cerrado = <strong>Agarrar / Golpear</strong></span>
+    <span class="icon">🖐️</span><span class="desc">Palma abierta = <strong>Soltar</strong></span>
+    <span class="icon">👍</span><span class="desc">Pulgar arriba = <strong>Interactuar / Lanzar</strong></span>
+    <span class="icon">🤙</span><span class="desc">Shaka = <strong>Recalibrar centro</strong></span>
+    <span class="icon">📱</span><span class="desc">Girar cabeza (gyro) = <strong>Mirar</strong></span>
+  </div>
+  <p style="color:#fa0;font-size:0.8em">⚠️ Necesitás cámara frontal y permisos de movimiento.<br>Funciona mejor con cardboard / visor VR.</p>
+  <button id="btn-start">▶ INICIAR JUEGO</button>
+</div>
+
+<div id="permission-msg">
+  <p style="font-size:1.1em;color:#fa0">📸 Permiso de cámara requerido</p>
+  <p>Para el hand tracking necesitás habilitar la cámara frontal.</p>
+  <button id="btn-grant">Permitir cámara</button>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<div id="ui-overlay">
+  <div id="hud">
+    <div class="hud-item" id="hud-score">🏆 0</div>
+    <div class="hud-item" id="hud-wave">WAVE 1</div>
+    <div class="hud-item" id="hud-ammo">✊ LISTO</div>
+  </div>
+  <div id="health-bar"><div id="health-fill"></div></div>
+  <div id="gesture-left">👈 —</div>
+  <div id="gesture-right">👉 —</div>
+  <div id="crosshair"></div>
+  <div class="damage-flash" id="damage-flash"></div>
+</div>
+
+<video id="cam-feed" autoplay playsinline muted style="display:none"></video>
+
+<!-- Three.js r165 -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+  }
+}
+</script>
+
+<!-- MediaPipe Hands -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/hands.js" crossorigin="anonymous"></script>
+
+<!-- Cannon-es physics -->
+<script src="https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"></script>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

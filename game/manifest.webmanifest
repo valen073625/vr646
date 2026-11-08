@@ -1,0 +1,14 @@
+{
+  "name": "VR Arena — Hand Tracking",
+  "short_name": "VR Arena",
+  "description": "Juego VR estilo BONELAB con hand tracking en el navegador",
+  "start_url": "/game/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#060610",
+  "theme_color": "#00ffcc",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
