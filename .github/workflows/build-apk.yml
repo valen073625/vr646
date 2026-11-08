@@ -73,7 +73,33 @@ jobs:
           if old in text and "screenOrientation" not in text:
               text = text.replace(old, new, 1)
           p.write_text(text)
-          print(text)
+
+          matches = list(Path("android/app/src/main/java").rglob("MainActivity.java"))
+          if not matches:
+              raise SystemExit("MainActivity.java not found")
+          act = matches[0]
+          pkg = act.read_text().split("package ", 1)[1].split(";", 1)[0].strip()
+          act.write_text(
+              "package " + pkg + ";\n\n"
+              "import android.Manifest;\n"
+              "import android.content.pm.PackageManager;\n"
+              "import android.os.Bundle;\n"
+              "import androidx.core.app.ActivityCompat;\n"
+              "import androidx.core.content.ContextCompat;\n"
+              "import com.getcapacitor.BridgeActivity;\n\n"
+              "public class MainActivity extends BridgeActivity {\n"
+              "  @Override\n"
+              "  public void onCreate(Bundle savedInstanceState) {\n"
+              "    super.onCreate(savedInstanceState);\n"
+              "    if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)\n"
+              "        != PackageManager.PERMISSION_GRANTED) {\n"
+              "      ActivityCompat.requestPermissions(this,\n"
+              "          new String[]{Manifest.permission.CAMERA}, 1001);\n"
+              "    }\n"
+              "  }\n"
+              "}\n"
+          )
+          print("patched", act)
           PY
 
       - name: Sync Capacitor
