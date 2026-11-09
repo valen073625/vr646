@@ -9,6 +9,17 @@ const WALK_SPEED  = 3.5;
 const HEAD_HEIGHT = 1.65;
 const GRAVITY     = -18;
 
+// MediaPipe Hand landmark connections, used to draw the hand sketch.
+const HAND_CONNECTIONS = [
+  [0,1],[1,2],[2,3],[3,4],
+  [0,5],[5,6],[6,7],[7,8],
+  [5,9],[9,10],[10,11],[11,12],
+  [9,13],[13,14],[14,15],[15,16],
+  [13,17],[17,18],[18,19],[19,20],
+  [0,17],
+];
+const HAND_TIPS = [4, 8, 12, 16, 20];
+
 export class Player extends EventTarget {
   constructor(scene, physics) {
     super();
@@ -34,29 +45,89 @@ export class Player extends EventTarget {
   }
 
   _makeHands(scene) {
-    const matL = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.9, metalness: 0 });
-    const matR = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.9, metalness: 0 });
-    const makeHand = (mat) => {
-      const g = new THREE.Group();
-      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.025, 0.1), mat);
-      g.add(palm);
-      for (let f = 0; f < 4; f++) {
-        const seg = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.015, 0.045), mat);
-        seg.position.set(-0.03 + f * 0.02, 0, -0.07);
-        g.add(seg);
-      }
-      const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.025, 0.035), mat);
-      thumb.position.set(0.05, 0, -0.03);
-      thumb.rotation.y = 0.5;
-      g.add(thumb);
-      g.visible = false;
-      scene.add(g);
-      return g;
+    // Hands are drawn as a glowing neon sketch (canvas texture on a
+    // camera-facing sprite) redrawn every frame from the live MediaPipe
+    // landmarks, instead of a static 3D hand model.
+    const makeHand = (color) => {
+      const size = 160;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const texture = new THREE.CanvasTexture(canvas);
+      const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        depthWrite: false,
+      });
+      const sprite = new THREE.Sprite(material);
+      sprite.scale.set(0.45, 0.45, 1);
+      sprite.visible = false;
+      scene.add(sprite);
+      return { mesh: sprite, canvas, ctx, texture, color };
     };
     return {
-      left:  { mesh: makeHand(matL), physics: this.physics.addHandBody(0.07) },
-      right: { mesh: makeHand(matR), physics: this.physics.addHandBody(0.07) },
+      left:  { ...makeHand('#00eaff'), physics: this.physics.addHandBody(0.07) },
+      right: { ...makeHand('#ff2bd6'), physics: this.physics.addHandBody(0.07) },
     };
+  }
+
+  _drawHandSketch(handObj, landmarks) {
+    const { ctx, canvas, color } = handObj;
+    const size = canvas.width;
+    ctx.clearRect(0, 0, size, size);
+    if (!landmarks || landmarks.length < 21) return;
+
+    // Mirror X (front camera is a selfie view) so the sketch matches
+    // what the player sees of their own hand.
+    const pts = landmarks.map((p) => ({ x: 1 - p.x, y: p.y }));
+    let minX = 1, maxX = 0, minY = 1, maxY = 0;
+    for (const p of pts) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    const padX = (maxX - minX) * 0.3 + 0.03;
+    const padY = (maxY - minY) * 0.3 + 0.03;
+    minX -= padX; maxX += padX; minY -= padY; maxY += padY;
+    const bw = Math.max(maxX - minX, 0.01);
+    const bh = Math.max(maxY - minY, 0.01);
+    const scale = Math.min(size / bw, size / bh);
+    const offX = (size - bw * scale) / 2;
+    const offY = (size - bh * scale) / 2;
+    const toXY = (p) => [offX + (p.x - minX) * scale, offY + (p.y - minY) * scale];
+
+    ctx.lineCap  = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = color;
+    ctx.fillStyle    = color;
+    ctx.lineWidth   = size * 0.045;
+    ctx.shadowColor = color;
+    ctx.shadowBlur  = size * 0.1;
+
+    ctx.beginPath();
+    for (const [a, b] of HAND_CONNECTIONS) {
+      const [ax, ay] = toXY(pts[a]);
+      const [bx, by] = toXY(pts[b]);
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+    }
+    ctx.stroke();
+
+    ctx.shadowBlur = size * 0.05;
+    for (const i of HAND_TIPS) {
+      const [x, y] = toXY(pts[i]);
+      ctx.beginPath();
+      ctx.arc(x, y, size * 0.032, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const [wx, wy] = toXY(pts[0]);
+    ctx.beginPath();
+    ctx.arc(wx, wy, size * 0.05, 0, Math.PI * 2);
+    ctx.fill();
+
+    handObj.texture.needsUpdate = true;
   }
 
   setGyro(alpha, beta, gamma) {
@@ -185,6 +256,7 @@ export class Player extends EventTarget {
       return;
     }
     handObj.mesh.visible = true;
+    this._drawHandSketch(handObj, tracker.landmarks);
     const palm = tracker.palmCenter;
     const camRight = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
     const camUp    = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
@@ -194,7 +266,7 @@ export class Player extends EventTarget {
       .addScaledVector(camRight, (palm.x - 0.5) * 0.6)
       .addScaledVector(camUp,   -(palm.y - 0.5) * 0.5);
     handObj.mesh.position.lerp(basePos, 0.4);
-    handObj.mesh.quaternion.slerp(this.camera.quaternion, 0.3);
+    // Sprite is always camera-facing — no quaternion needed for billboarding.
     handObj.physics.position.set(
       handObj.mesh.position.x,
       handObj.mesh.position.y,

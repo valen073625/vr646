@@ -58,7 +58,7 @@ jobs:
               )
               text = text.replace("<application", feat, 1)
           old = 'android:launchMode="singleTask"'
-          new = 'android:launchMode="singleTask" android:screenOrientation="sensorLandscape"'
+          new = 'android:launchMode="singleTask" android:screenOrientation="landscape" android:configChanges="orientation|screenSize|keyboardHidden"'
           if old in text and "screenOrientation" not in text:
               text = text.replace(old, new, 1)
           p.write_text(text)
@@ -101,8 +101,11 @@ jobs:
       - name: Publish APK on GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.2
-          name: VR Arena v0.1.2
-          body: Corrige physics is not defined al crear las manos.
+          tag_name: v0.1.3
+          name: VR Arena v0.1.3
+          body: |
+            - Fix: orientación fija en landscape (ya no gira/flipea la interfaz).
+            - Hand tracking: manos dibujadas como boceto neón 2D en vez de modelo 3D.
+            - Cámara de hand tracking optimizada para mayor velocidad.
           files: VR-Arena.apk
           fail_on_unmatched_files: true

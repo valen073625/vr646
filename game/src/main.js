@@ -65,6 +65,20 @@ function initRenderer() {
   window.addEventListener('resize', onResize);
 }
 
+async function lockLandscape() {
+  try {
+    const el = document.documentElement;
+    if (el.requestFullscreen && !document.fullscreenElement) {
+      await el.requestFullscreen().catch(() => {});
+    }
+    if (screen.orientation && screen.orientation.lock) {
+      await screen.orientation.lock('landscape').catch(() => {});
+    }
+  } catch (e) {
+    // Orientation Lock API not supported (e.g. desktop Safari) — ignore.
+  }
+}
+
 function onResize() {
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h, false);
@@ -100,7 +114,12 @@ async function initCamera() {
     throw new Error('getUserMedia missing');
   }
   const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } },
+    video: {
+      facingMode: 'user',
+      width:     { ideal: 224, max: 320 },
+      height:    { ideal: 168, max: 240 },
+      frameRate: { ideal: 30, max: 60 },
+    },
     audio: false,
   });
   videoEl.srcObject = stream;
@@ -241,6 +260,7 @@ async function bootstrap() {
     if (gameRunning) return;
     startScreen.style.display = 'none';
     setLoading('Iniciando…');
+    await lockLandscape();
     initGyro();
 
     try {
