@@ -1,0 +1,11 @@
+{
+  "name": "MR Platform",
+  "short_name": "MR Platform",
+  "description": "Mixed Reality platform for smartphones",
+  "start_url": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#000000",
+  "theme_color": "#00e5ff",
+  "lang": "es"
+}

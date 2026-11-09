@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, maximum-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>MR Platform</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #000; overflow: hidden; touch-action: none; }
+    #canvas { display: block; width: 100vw; height: 100vh; }
+
+    #ui {
+      position: fixed; inset: 0; pointer-events: none; z-index: 10;
+      font-family: monospace; color: #0ff;
+    }
+
+    #hud {
+      position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;
+    }
+    .hud-item {
+      background: rgba(0,20,40,0.75);
+      border: 1px solid #0ff4;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      text-shadow: 0 0 6px #0ff;
+    }
+
+    #btns {
+      position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 10px; pointer-events: all;
+    }
+    #btns button {
+      padding: 10px 16px;
+      background: rgba(0,40,60,0.85);
+      border: 1px solid #0ff;
+      color: #0ff;
+      font-family: monospace;
+      font-size: 13px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    #start-screen {
+      position: fixed; inset: 0; background: #000;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 100; color: #fff; font-family: monospace; text-align: center; padding: 24px;
+      pointer-events: all;
+    }
+    #start-screen h1 {
+      font-size: 1.8em; color: #0ff; text-shadow: 0 0 24px #0ff; margin-bottom: 12px;
+    }
+    #start-screen p { color: #9ab; max-width: 340px; margin-bottom: 8px; font-size: 0.9em; line-height: 1.4; }
+    #btn-start {
+      margin-top: 20px; padding: 14px 36px; font-size: 1.1em; font-family: monospace;
+      background: #0ff2; border: 2px solid #0ff; color: #0ff; border-radius: 10px; cursor: pointer;
+    }
+
+    #loading {
+      position: fixed; inset: 0; background: #000; z-index: 200;
+      display: none; align-items: center; justify-content: center;
+      color: #0ff; font-family: monospace; gap: 12px;
+    }
+    .spinner {
+      width: 28px; height: 28px; border: 3px solid #0ff3;
+      border-top-color: #0ff; border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <span id="loading-label">Cargando…</span>
+</div>
+
+<div id="start-screen">
+  <h1>🥽 MR PLATFORM</h1>
+  <p>Plataforma de Mixed Reality para smartphone.</p>
+  <p>Ves el <strong>mundo real</strong> y abrís experiencias encima con las manos.</p>
+  <p style="color:#fa0;font-size:0.8em;margin-top:12px">
+    Girá el teléfono en horizontal · Usá un visor cardboard si tenés
+  </p>
+  <button id="btn-start">▶ ENTRAR</button>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<div id="ui">
+  <div id="hud">
+    <div class="hud-item" id="hud-mode">MR</div>
+    <div class="hud-item" id="hud-app">APP: home</div>
+    <div class="hud-item" id="hud-hands">👈 —  👉 —</div>
+  </div>
+  <div id="btns">
+    <button id="btn-toggle-mr">👁 Passthrough</button>
+    <button id="btn-home">🏠 Inicio</button>
+  </div>
+</div>
+
+<video id="cam-feed" autoplay playsinline muted style="display:none"></video>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js"
+  }
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/hands.js" crossorigin="anonymous"></script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

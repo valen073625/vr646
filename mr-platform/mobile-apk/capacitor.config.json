@@ -1,0 +1,11 @@
+{
+  "appId": "com.vr646.mrplatform",
+  "appName": "MR Platform",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}
