@@ -54,8 +54,8 @@ export class Player extends EventTarget {
       return g;
     };
     return {
-      left:  { mesh: makeHand(matL), physics: physics.addHandBody(0.07) },
-      right: { mesh: makeHand(matR), physics: physics.addHandBody(0.07) },
+      left:  { mesh: makeHand(matL), physics: this.physics.addHandBody(0.07) },
+      right: { mesh: makeHand(matR), physics: this.physics.addHandBody(0.07) },
     };
   }
 
