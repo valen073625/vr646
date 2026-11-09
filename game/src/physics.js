@@ -2,10 +2,10 @@
  * physics.js — cannon-es world wrapper
  * Bridges Three.js meshes ↔ Cannon-ES rigid bodies.
  */
+import CANNON from './cannon.js';
 
 export class PhysicsWorld {
   constructor() {
-    // cannon-es is loaded as a global via script tag
     this.world = new CANNON.World({
       gravity: new CANNON.Vec3(0, -18, 0),
     });
@@ -15,11 +15,10 @@ export class PhysicsWorld {
     this.world.defaultContactMaterial.restitution = 0.3;
     this.world.defaultContactMaterial.friction    = 0.5;
 
-    this._pairs = []; // { mesh, body }
+    this._pairs = [];
     this._fixedStep = 1/60;
     this._maxSubSteps = 3;
 
-    // Materials
     this.groundMat = new CANNON.Material('ground');
     this.objectMat = new CANNON.Material('object');
     this.handMat   = new CANNON.Material('hand');
@@ -34,7 +33,6 @@ export class PhysicsWorld {
     this.world.addContactMaterial(handObj);
   }
 
-  /** Create a static floor */
   addFloor(y = 0) {
     const shape = new CANNON.Plane();
     const body  = new CANNON.Body({ mass: 0, material: this.groundMat });
@@ -45,7 +43,6 @@ export class PhysicsWorld {
     return body;
   }
 
-  /** Create a static box (walls, platforms) */
   addStaticBox(w, h, d, x, y, z) {
     const shape = new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2));
     const body  = new CANNON.Body({ mass: 0, material: this.groundMat });
@@ -55,7 +52,6 @@ export class PhysicsWorld {
     return body;
   }
 
-  /** Create a dynamic rigid body for an interactable object */
   addDynamicBox(mesh, mass, w, h, d) {
     const shape = new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2));
     const body  = new CANNON.Body({ mass, material: this.objectMat, linearDamping: 0.4, angularDamping: 0.6 });
@@ -79,7 +75,6 @@ export class PhysicsWorld {
     return body;
   }
 
-  /** Kinematic body for a hand (no physics forces affect it, but it pushes objects) */
   addHandBody(r = 0.06) {
     const shape = new CANNON.Sphere(r);
     const body  = new CANNON.Body({ mass: 0, material: this.handMat, type: CANNON.Body.KINEMATIC });
