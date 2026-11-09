@@ -101,8 +101,8 @@ jobs:
       - name: Publish APK on GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.1
-          name: VR Arena v0.1.1
-          body: Corrige CANNON is not defined. Instalar permitiendo orígenes desconocidos.
+          tag_name: v0.1.2
+          name: VR Arena v0.1.2
+          body: Corrige physics is not defined al crear las manos.
           files: VR-Arena.apk
           fail_on_unmatched_files: true
