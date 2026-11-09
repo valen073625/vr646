@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>MR</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; touch-action: none; }
+  #c { display: block; width: 100%; height: 100%; }
+  #boot {
+    position: fixed; inset: 0; display: none; align-items: flex-end; justify-content: center;
+    padding: 28px; z-index: 5;
+  }
+  #boot button {
+    pointer-events: all; background: #111; color: #fff; border: 1px solid #333;
+    border-radius: 999px; padding: 12px 18px; font: 14px/1.2 ui-monospace, monospace;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="boot"><button id="go" type="button">Permitir cámara</button></div>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+const canvas = document.getElementById('c');
+const boot = document.getElementById('boot');
+const go = document.getElementById('go');
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+renderer.setPixelRatio(1);
+renderer.setClearColor(0x05060a, 1);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 40);
+camera.position.set(0, 1.55, 0);
+
+const dock = new THREE.Group();
+dock.position.set(0, 1.22, -1.45);
+scene.add(dock);
+
+const ICONS = [
+  { id: 'files', color: '#e23b3b', draw: 'bag' },
+  { id: 'space', color: '#16181e', draw: 'swirl' },
+  { id: 'camera', color: '#e23d78', draw: 'cam' },
+  { id: 'photos', color: '#e0a31a', draw: 'mountain' },
+  { id: 'apps', color: '#2f6bff', draw: 'grid' },
+];
+const EXTRA = { id: 'gallery', color: '#e23b3b', draw: 'picture' };
+
+const hitMeshes = [];
+let barCanvas, barCtx, barTex, barMesh;
+let openId = null;
+let panel = null;
+let handOk = false;
+let lastPinch = 0;
+let video = null;
+let landmarker = null;
+let lastVideoTime = -1;
+const cursor = new THREE.Mesh(
+  new THREE.SphereGeometry(0.018, 16, 12),
+  new THREE.MeshBasicMaterial({ color: 0xffffff })
+);
+cursor.visible = false;
+scene.add(cursor);
+
+// --- Mano dibujada (boceto neón 2D), no un modelo 3D -----------------
+const HAND_CONNECTIONS = [
+  [0,1],[1,2],[2,3],[3,4],
+  [0,5],[5,6],[6,7],[7,8],
+  [5,9],[9,10],[10,11],[11,12],
+  [9,13],[13,14],[14,15],[15,16],
+  [13,17],[17,18],[18,19],[19,20],
+  [0,17],
+];
+const HAND_TIPS = [4, 8, 12, 16, 20];
+
+const handSketchCanvas = document.createElement('canvas');
+handSketchCanvas.width = handSketchCanvas.height = 192;
+const handSketchCtx = handSketchCanvas.getContext('2d');
+const handSketchTex = new THREE.CanvasTexture(handSketchCanvas);
+const handSketch = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: handSketchTex, transparent: true, depthWrite: false,
+}));
+handSketch.scale.set(0.5, 0.5, 1);
+handSketch.visible = false;
+scene.add(handSketch);
+
+function drawHandSketch(lm) {
+  const size = handSketchCanvas.width;
+  const ctx = handSketchCtx;
+  ctx.clearRect(0, 0, size, size);
+  if (!lm) { handSketch.visible = false; return; }
+
+  // Cámara frontal/trasera entrega coords normalizadas; centramos y
+  // escalamos el bounding box de la mano para que el dibujo se vea grande.
+  let minX = 1, maxX = 0, minY = 1, maxY = 0;
+  for (const p of lm) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const padX = (maxX - minX) * 0.3 + 0.03;
+  const padY = (maxY - minY) * 0.3 + 0.03;
+  minX -= padX; maxX += padX; minY -= padY; maxY += padY;
+  const bw = Math.max(maxX - minX, 0.01);
+  const bh = Math.max(maxY - minY, 0.01);
+  const scale = Math.min(size / bw, size / bh);
+  const offX = (size - bw * scale) / 2;
+  const offY = (size - bh * scale) / 2;
+  const toXY = (p) => [offX + (p.x - minX) * scale, offY + (p.y - minY) * scale];
+
+  const color = '#7dffb3';
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = color;
+  ctx.fillStyle    = color;
+  ctx.lineWidth   = size * 0.045;
+  ctx.shadowColor = color;
+  ctx.shadowBlur  = size * 0.1;
+
+  ctx.beginPath();
+  for (const [a, b] of HAND_CONNECTIONS) {
+    const [ax, ay] = toXY(lm[a]);
+    const [bx, by] = toXY(lm[b]);
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+  }
+  ctx.stroke();
+
+  ctx.shadowBlur = size * 0.05;
+  for (const i of HAND_TIPS) {
+    const [x, y] = toXY(lm[i]);
+    ctx.beginPath();
+    ctx.arc(x, y, size * 0.032, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const [wx, wy] = toXY(lm[0]);
+  ctx.beginPath();
+  ctx.arc(wx, wy, size * 0.05, 0, Math.PI * 2);
+  ctx.fill();
+
+  handSketchTex.needsUpdate = true;
+  handSketch.visible = true;
+
+  // Ubicar el boceto en el espacio 3D cerca de donde apunta la mano.
+  const palmX = (lm[0].x + lm[5].x + lm[9].x + lm[13].x + lm[17].x) / 5;
+  const palmY = (lm[0].y + lm[5].y + lm[9].y + lm[13].y + lm[17].y) / 5;
+  const camRight = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+  const camUp    = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+  const camFwd   = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 2).negate();
+  const basePos = camera.position.clone()
+    .addScaledVector(camFwd,   0.6)
+    .addScaledVector(camRight, (0.5 - palmX) * 0.9)
+    .addScaledVector(camUp,   -(palmY - 0.5) * 0.6);
+  handSketch.position.lerp(basePos, 0.4);
+}
+
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+let pointerNdc = null;
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function drawGlyph(ctx, type, s) {
+  ctx.save();
+  ctx.translate(s / 2, s / 2);
+  ctx.strokeStyle = '#fff';
+  ctx.fillStyle = '#fff';
+  ctx.lineWidth = s * 0.07;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  const u = s * 0.28;
+  if (type === 'bag') {
+    ctx.strokeRect(-u * 0.85, -u * 0.35, u * 1.7, u * 1.25);
+    ctx.beginPath();
+    ctx.arc(0, -u * 0.35, u * 0.48, Math.PI, 0);
+    ctx.stroke();
+  } else if (type === 'swirl') {
+    ctx.beginPath();
+    for (let a = 0; a < Math.PI * 5.2; a += 0.2) {
+      const rr = (a / (Math.PI * 5.2)) * u;
+      const x = Math.cos(a) * rr;
+      const y = Math.sin(a) * rr;
+      if (a === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  } else if (type === 'cam') {
+    ctx.strokeRect(-u, -u * 0.55, u * 2, u * 1.35);
+    ctx.beginPath();
+    ctx.arc(0, u * 0.1, u * 0.42, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillRect(u * 0.45, -u * 0.85, u * 0.45, u * 0.28);
+  } else if (type === 'mountain') {
+    ctx.beginPath();
+    ctx.moveTo(-u, u * 0.7);
+    ctx.lineTo(-u * 0.15, -u * 0.45);
+    ctx.lineTo(u * 0.35, u * 0.15);
+    ctx.lineTo(u * 0.85, -u * 0.2);
+    ctx.lineTo(u, u * 0.7);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(u * 0.45, -u * 0.55, u * 0.16, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (type === 'grid') {
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+      ctx.beginPath();
+      ctx.arc(-u * 0.7 + c * u * 0.7, -u * 0.7 + r * u * 0.7, u * 0.16, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (type === 'picture') {
+    ctx.strokeRect(-u, -u * 0.85, u * 2, u * 1.7);
+    ctx.beginPath();
+    ctx.moveTo(-u, u * 0.5);
+    ctx.lineTo(-u * 0.2, 0);
+    ctx.lineTo(u * 0.35, u * 0.35);
+    ctx.lineTo(u, -u * 0.15);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function iconCanvas(color, type) {
+  const s = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const g = c.getContext('2d');
+  g.fillStyle = color;
+  roundRect(g, 8, 8, s - 16, s - 16, 56);
+  g.fill();
+  drawGlyph(g, type, s);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function buildDock() {
+  const W = 1700, H = 320;
+  barCanvas = document.createElement('canvas');
+  barCanvas.width = W; barCanvas.height = H;
+  barCtx = barCanvas.getContext('2d');
+  barTex = new THREE.CanvasTexture(barCanvas);
+  barTex.colorSpace = THREE.SRGBColorSpace;
+  paintBar();
+  const bw = 2.35, bh = 2.35 * (H / W);
+  barMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(bw, bh),
+    new THREE.MeshBasicMaterial({ map: barTex, transparent: true })
+  );
+  dock.add(barMesh);
+
+  const iconPx = 210;
+  const start = 360;
+  const gap = 28;
+  ICONS.forEach((ic, i) => {
+    const cx = start + i * (iconPx + gap) + iconPx / 2;
+    const nx = (cx / W - 0.5) * bw;
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(bh * 0.78, bh * 0.78),
+      new THREE.MeshBasicMaterial({ map: iconCanvas(ic.color, ic.draw), transparent: true })
+    );
+    mesh.position.set(nx, 0, 0.01);
+    mesh.userData.app = ic.id;
+    dock.add(mesh);
+    hitMeshes.push(mesh);
+  });
+
+  const extra = new THREE.Mesh(
+    new THREE.PlaneGeometry(bh * 0.92, bh * 0.92),
+    new THREE.MeshBasicMaterial({ map: iconCanvas(EXTRA.color, EXTRA.draw), transparent: true })
+  );
+  extra.position.set(bw / 2 + 0.16, 0, 0);
+  extra.userData.app = EXTRA.id;
+  dock.add(extra);
+  hitMeshes.push(extra);
+}
+
+function paintBar() {
+  const W = barCanvas.width, H = barCanvas.height;
+  const g = barCtx;
+  g.clearRect(0, 0, W, H);
+  g.fillStyle = 'rgba(12,12,14,0.92)';
+  roundRect(g, 8, 28, W - 16, H - 56, 80);
+  g.fill();
+  g.strokeStyle = 'rgba(255,255,255,0.08)';
+  g.lineWidth = 2;
+  g.stroke();
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  g.fillStyle = '#fff';
+  g.font = '600 78px ui-sans-serif, system-ui, sans-serif';
+  g.textAlign = 'left';
+  g.textBaseline = 'middle';
+  g.fillText(hh + ':' + mm, 48, H / 2);
+  g.strokeStyle = handOk ? '#7dffb3' : 'rgba(255,255,255,0.85)';
+  g.lineWidth = 5;
+  g.beginPath();
+  g.arc(270, H / 2 + 8, 18, Math.PI * 1.15, Math.PI * 1.85);
+  g.stroke();
+  g.beginPath();
+  g.arc(270, H / 2 + 8, 32, Math.PI * 1.2, Math.PI * 1.8);
+  g.stroke();
+  if (barTex) barTex.needsUpdate = true;
+}
+
+const TITLES = {
+  files: 'Archivos',
+  space: 'Espacio',
+  camera: 'Cámara',
+  photos: 'Fotos',
+  apps: 'Aplicaciones',
+  gallery: 'Galería',
+};
+
+function openApp(id) {
+  if (openId === id) { closeApp(); return; }
+  closeApp();
+  openId = id;
+  const c = document.createElement('canvas');
+  c.width = 900; c.height = 520;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(16,16,20,0.94)';
+  roundRect(g, 8, 8, 884, 504, 36);
+  g.fill();
+  g.fillStyle = '#fff';
+  g.font = '600 64px ui-sans-serif, system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.fillText(TITLES[id] || id, 450, 200);
+  g.font = '32px ui-sans-serif, system-ui, sans-serif';
+  g.fillStyle = '#aaa';
+  g.fillText('Pellizca otra vez para cerrar', 450, 280);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  panel = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.15, 0.66),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true })
+  );
+  panel.position.set(0, 0.62, 0);
+  panel.userData.app = 'close';
+  dock.add(panel);
+  hitMeshes.push(panel);
+}
+
+function closeApp() {
+  if (!panel) { openId = null; return; }
+  dock.remove(panel);
+  panel.geometry.dispose();
+  panel.material.map.dispose();
+  panel.material.dispose();
+  const i = hitMeshes.indexOf(panel);
+  if (i >= 0) hitMeshes.splice(i, 1);
+  panel = null;
+  openId = null;
+}
+
+let passthroughMesh = null;
+function attachVideo(stream) {
+  video = document.createElement('video');
+  video.setAttribute('playsinline', '');
+  video.muted = true;
+  video.autoplay = true;
+  video.srcObject = stream;
+  return video.play().then(() => {
+    const tex = new THREE.VideoTexture(video);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    if (passthroughMesh) scene.remove(passthroughMesh);
+    passthroughMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(8, 4.5),
+      new THREE.MeshBasicMaterial({ map: tex, depthWrite: false, side: THREE.DoubleSide })
+    );
+    passthroughMesh.position.set(0, 1.55, -6);
+    passthroughMesh.renderOrder = -1;
+    scene.add(passthroughMesh);
+  });
+}
+
+async function startCamera() {
+  const tries = [
+    { video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30, max: 60 } }, audio: false },
+    { video: { facingMode: 'user' }, audio: false },
+    { video: true, audio: false },
+  ];
+  let stream = null;
+  for (const c of tries) {
+    try { stream = await navigator.mediaDevices.getUserMedia(c); break; } catch {}
+  }
+  if (!stream) return false;
+  await attachVideo(stream);
+  startHands();
+  return true;
+}
+
+async function startHands() {
+  try {
+    const { FilesetResolver, HandLandmarker } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.17');
+    const vision = await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.17/wasm'
+    );
+    landmarker = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+        delegate: 'CPU',
+      },
+      runningMode: 'VIDEO',
+      numHands: 1,
+    });
+  } catch (err) {
+    console.warn('hands', err);
+    landmarker = null;
+  }
+}
+
+const zee = new THREE.Vector3(0, 0, 1);
+const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+const orientEuler = new THREE.Euler();
+const qScreen = new THREE.Quaternion();
+let baseInv = null;
+let orientSamples = 0;
+
+function deviceQuat(alphaDeg, betaDeg, gammaDeg) {
+  const alpha = THREE.MathUtils.degToRad(alphaDeg || 0);
+  const beta = THREE.MathUtils.degToRad(betaDeg || 0);
+  const gamma = THREE.MathUtils.degToRad(gammaDeg || 0);
+  const orient = THREE.MathUtils.degToRad((screen.orientation && screen.orientation.angle) || window.orientation || 0);
+  const q = new THREE.Quaternion();
+  orientEuler.set(beta, alpha, -gamma, 'YXZ');
+  q.setFromEuler(orientEuler);
+  q.multiply(q1);
+  q.multiply(qScreen.setFromAxisAngle(zee, -orient));
+  return q;
+}
+
+function onOrient(e) {
+  if (e.alpha == null || !e.absolute && e.alpha === 0 && e.beta === 0) return;
+  const q = deviceQuat(e.alpha, e.beta, e.gamma);
+  orientSamples++;
+  if (!baseInv) {
+    if (orientSamples < 8) return;
+    baseInv = q.clone().invert();
+    return;
+  }
+  camera.quaternion.copy(baseInv).multiply(q);
+}
+
+function listenGyro() {
+  window.addEventListener('deviceorientation', onOrient, true);
+}
+
+function requestGyro() {
+  const D = window.DeviceOrientationEvent;
+  if (D && typeof D.requestPermission === 'function') {
+    D.requestPermission().then((s) => { if (s === 'granted') listenGyro(); }).catch(() => {});
+  } else {
+    listenGyro();
+  }
+}
+
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+const inApp = !!(window.Capacitor);
+function useStereo() {
+  return inApp && window.innerWidth > window.innerHeight;
+}
+
+const rtL = new THREE.WebGLRenderTarget(2, 2);
+const rtR = new THREE.WebGLRenderTarget(2, 2);
+const eyeCam = new THREE.PerspectiveCamera(72, 1, 0.05, 40);
+const quadScene = new THREE.Scene();
+const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const matL = new THREE.MeshBasicMaterial({ map: rtL.texture });
+const matR = new THREE.MeshBasicMaterial({ map: rtR.texture });
+const leftQ = new THREE.Mesh(new THREE.PlaneGeometry(1, 2), matL);
+leftQ.position.x = -0.5;
+const rightQ = new THREE.Mesh(new THREE.PlaneGeometry(1, 2), matR);
+rightQ.position.x = 0.5;
+quadScene.add(leftQ, rightQ);
+
+let stereoW = 0, stereoH = 0;
+function renderStereo() {
+  const w = window.innerWidth, h = window.innerHeight;
+  const half = Math.max(1, Math.floor(w / 2));
+  if (half !== stereoW || h !== stereoH) {
+    stereoW = half;
+    stereoH = h;
+    rtL.setSize(half, h);
+    rtR.setSize(half, h);
+  }
+  const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+  const ipd = 0.064;
+  for (const [rt, sign] of [[rtL, -1], [rtR, 1]]) {
+    eyeCam.copy(camera);
+    eyeCam.aspect = half / h;
+    eyeCam.updateProjectionMatrix();
+    eyeCam.position.copy(camera.position).addScaledVector(right, sign * ipd / 2);
+    eyeCam.quaternion.copy(camera.quaternion);
+    eyeCam.updateMatrixWorld();
+    renderer.setRenderTarget(rt);
+    renderer.render(scene, eyeCam);
+  }
+  renderer.setRenderTarget(null);
+  renderer.render(quadScene, quadCam);
+}
+
+const handCanvas = document.createElement('canvas');
+handCanvas.width = 256;
+handCanvas.height = 144;
+const handCtx = handCanvas.getContext('2d', { willReadFrequently: true });
+let handFails = 0;
+let nextHandAt = 0;
+
+function pinchDist(lm) {
+  const a = lm[4], b = lm[8];
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function considerHands() {
+  if (!landmarker || !video || video.readyState < 2) return;
+  const now = performance.now();
+  if (now < nextHandAt) return;
+  nextHandAt = now + 45; // ~22 Hz — más rápido que antes (120ms = ~8 Hz)
+  try {
+    // Reduce el frame a un canvas chico antes de correr el modelo: la
+    // detección es mucho más rápida así, sin tener que bajar la
+    // resolución del passthrough (que sigue viéndose nítido).
+    handCtx.drawImage(video, 0, 0, handCanvas.width, handCanvas.height);
+    const res = landmarker.detectForVideo(handCanvas, now);
+    const hands = res?.landmarks || [];
+    handOk = hands.length > 0;
+    handFails = 0;
+    if (!handOk) { cursor.visible = false; drawHandSketch(null); return; }
+    const lm = hands[0];
+    drawHandSketch(lm);
+    const tip = lm[8];
+    ndc.set(tip.x * 2 - 1, (1 - tip.y) * 2 - 1);
+    aim(ndc);
+    if (pinchDist(lm) < 0.08 && now - lastPinch > 500) {
+      lastPinch = now;
+      activate();
+    }
+  } catch (err) {
+    handFails++;
+    if (handFails > 4) landmarker = null;
+  }
+}
+
+let hovered = null;
+function aim(v) {
+  raycaster.setFromCamera(v, camera);
+  const hits = raycaster.intersectObjects(hitMeshes, false);
+  cursor.visible = true;
+  if (hits.length) {
+    cursor.position.copy(hits[0].point);
+    hovered = hits[0].object;
+    cursor.material.color.setHex(0x7dffb3);
+  } else {
+    cursor.position.copy(camera.position).add(raycaster.ray.direction.clone().multiplyScalar(1.2));
+    hovered = null;
+    cursor.material.color.setHex(0xffffff);
+  }
+}
+
+function activate() {
+  if (!hovered) return;
+  const id = hovered.userData.app;
+  if (id === 'close') closeApp();
+  else openApp(id);
+}
+
+canvas.addEventListener('pointermove', (e) => {
+  const r = canvas.getBoundingClientRect();
+  pointerNdc = new THREE.Vector2(
+    ((e.clientX - r.left) / r.width) * 2 - 1,
+    -((e.clientY - r.top) / r.height) * 2 + 1
+  );
+});
+canvas.addEventListener('pointerdown', () => { if (pointerNdc) { aim(pointerNdc); activate(); } });
+
+let clockAcc = 0;
+function frame(t) {
+  requestAnimationFrame(frame);
+  considerHands();
+  if (pointerNdc && !handOk) aim(pointerNdc);
+  clockAcc += 1;
+  if (clockAcc % 30 === 0) paintBar();
+  if (passthroughMesh) {
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    passthroughMesh.position.copy(camera.position).addScaledVector(dir, 6);
+    passthroughMesh.quaternion.copy(camera.quaternion);
+  }
+  if (useStereo()) renderStereo();
+  else {
+    renderer.setRenderTarget(null);
+    renderer.render(scene, camera);
+  }
+}
+
+let frameOn = false;
+async function begin() {
+  boot.style.display = 'none';
+  requestGyro();
+  try { await screen.orientation?.lock?.('landscape'); } catch {}
+  await startCamera();
+  if (!barMesh) buildDock();
+  if (!frameOn) { frameOn = true; requestAnimationFrame(frame); }
+}
+
+go.addEventListener('click', begin);
+
+async function auto() {
+  requestGyro();
+  try { await screen.orientation?.lock?.('landscape'); } catch {}
+  buildDock();
+  if (!frameOn) { frameOn = true; requestAnimationFrame(frame); }
+  const ok = await startCamera().catch(() => false);
+  if (!ok && !inApp) boot.style.display = 'flex';
+}
+auto();
+</script>
+</body>
+</html>

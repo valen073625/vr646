@@ -1,0 +1,117 @@
+name: Build MR Platform APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'mr-platform/**'
+      - 'mr-platform-apk/**'
+      - '.github/workflows/build-mr-platform-apk.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Install JS dependencies
+        working-directory: mr-platform-apk
+        run: npm install
+      - name: Bundle MR Platform into the web dir
+        working-directory: mr-platform-apk
+        run: node prepare-web.js
+      - name: Generate the native Android project
+        working-directory: mr-platform-apk
+        run: npx cap add android
+      - name: Camera permission and landscape
+        working-directory: mr-platform-apk
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          text = p.read_text()
+          perms = [
+              "android.permission.INTERNET",
+              "android.permission.CAMERA",
+              "android.permission.ACCESS_NETWORK_STATE",
+          ]
+          for perm in perms:
+              if perm not in text:
+                  tag = f'<uses-permission android:name="{perm}" />'
+                  text = text.replace("<application", tag + "\n    <application", 1)
+          if "android.hardware.camera" not in text:
+              feat = (
+                  '<uses-feature android:name="android.hardware.camera" android:required="false" />\n'
+                  '    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />\n'
+                  "    <application"
+              )
+              text = text.replace("<application", feat, 1)
+          # Fixed landscape — avoids the screen flipping/rotating with the
+          # sensor while the phone sits inside a headset. Only add the
+          # attribute if it's not already present (Capacitor's template can
+          # add other attributes to this tag; a duplicate android:screenOrientation
+          # breaks the manifest merge).
+          old = 'android:launchMode="singleTask"'
+          new = 'android:launchMode="singleTask" android:screenOrientation="landscape"'
+          if old in text and "screenOrientation" not in text:
+              text = text.replace(old, new, 1)
+          p.write_text(text)
+          matches = list(Path("android/app/src/main/java").rglob("MainActivity.java"))
+          if not matches:
+              raise SystemExit("MainActivity.java not found")
+          act = matches[0]
+          pkg = act.read_text().split("package ", 1)[1].split(";", 1)[0].strip()
+          act.write_text(
+              "package " + pkg + ";\n\n"
+              "import android.Manifest;\n"
+              "import android.content.pm.PackageManager;\n"
+              "import android.os.Bundle;\n"
+              "import androidx.core.app.ActivityCompat;\n"
+              "import androidx.core.content.ContextCompat;\n"
+              "import com.getcapacitor.BridgeActivity;\n\n"
+              "public class MainActivity extends BridgeActivity {\n"
+              "  @Override\n"
+              "  public void onCreate(Bundle savedInstanceState) {\n"
+              "    super.onCreate(savedInstanceState);\n"
+              "    if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)\n"
+              "        != PackageManager.PERMISSION_GRANTED) {\n"
+              "      ActivityCompat.requestPermissions(this,\n"
+              "          new String[]{Manifest.permission.CAMERA}, 1001);\n"
+              "    }\n"
+              "  }\n"
+              "}\n"
+          )
+          PY
+      - name: Sync Capacitor
+        working-directory: mr-platform-apk
+        run: npx cap sync android
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+      - name: Build debug APK
+        working-directory: mr-platform-apk/android
+        run: ./gradlew assembleDebug --no-daemon
+      - name: Rename APK
+        run: cp mr-platform-apk/android/app/build/outputs/apk/debug/app-debug.apk MR-Platform.apk
+      - name: Publish APK on GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mr-platform-v0.1.0
+          name: MR Platform v0.1.0
+          body: |
+            - Orientación fija en landscape (ya no gira/flipea al entrar).
+            - La mano trackeada se dibuja como boceto neón 2D, no un modelo 3D.
+            - Tracking de mano más rápido: detección sobre un frame reducido
+              y throttle bajado de ~8 Hz a ~22 Hz, sin tocar la calidad del
+              passthrough de cámara.
+          files: MR-Platform.apk
+          fail_on_unmatched_files: true
