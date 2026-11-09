@@ -58,7 +58,7 @@ jobs:
               )
               text = text.replace("<application", feat, 1)
           old = 'android:launchMode="singleTask"'
-          new = 'android:launchMode="singleTask" android:screenOrientation="landscape" android:configChanges="orientation|screenSize|keyboardHidden"'
+          new = 'android:launchMode="singleTask" android:screenOrientation="landscape"'
           if old in text and "screenOrientation" not in text:
               text = text.replace(old, new, 1)
           p.write_text(text)
