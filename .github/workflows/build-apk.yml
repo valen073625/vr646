@@ -1,7 +1,5 @@
 name: Build Android APK
 
-# Packages game/ into a debug APK and publishes VR-Arena.apk on GitHub Releases.
-
 on:
   workflow_dispatch:
   push:
@@ -17,34 +15,24 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Set up JDK
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-
       - name: Install JS dependencies
         working-directory: mobile-apk
         run: npm install
-
       - name: Bundle the VR game into the web dir
         working-directory: mobile-apk
         run: node prepare-web.js
-
       - name: Generate the native Android project
         working-directory: mobile-apk
         run: npx cap add android
-
       - name: Camera permission and landscape
         working-directory: mobile-apk
         run: |
@@ -74,7 +62,6 @@ jobs:
           if old in text and "screenOrientation" not in text:
               text = text.replace(old, new, 1)
           p.write_text(text)
-
           matches = list(Path("android/app/src/main/java").rglob("MainActivity.java"))
           if not matches:
               raise SystemExit("MainActivity.java not found")
@@ -100,28 +87,22 @@ jobs:
               "  }\n"
               "}\n"
           )
-          print("patched", act)
           PY
-
       - name: Sync Capacitor
         working-directory: mobile-apk
         run: npx cap sync android
-
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-
       - name: Build debug APK
         working-directory: mobile-apk/android
         run: ./gradlew assembleDebug --no-daemon
-
       - name: Rename APK
         run: cp mobile-apk/android/app/build/outputs/apk/debug/app-debug.apk VR-Arena.apk
-
       - name: Publish APK on GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.0
-          name: VR Arena v0.1.0
-          body: APK de depuración. Instalar permitiendo orígenes desconocidos. Aceptar la cámara al abrir.
+          tag_name: v0.1.1
+          name: VR Arena v0.1.1
+          body: Corrige CANNON is not defined. Instalar permitiendo orígenes desconocidos.
           files: VR-Arena.apk
           fail_on_unmatched_files: true
